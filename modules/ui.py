@@ -2,9 +2,12 @@ import os
 import platform
 import webbrowser
 import customtkinter as ctk
-from typing import Callable, Tuple
+from typing import Callable, Tuple, List, Any
+from types import ModuleType
 import cv2
 from PIL import Image, ImageOps
+from pygrabber.dshow_graph import FilterGraph
+import pyvirtualcam
 
 # Import OS-specific modules only when necessary
 if platform.system() == 'Darwin':  # macOS
@@ -20,7 +23,7 @@ from modules.processors.frame.core import get_frame_processors_modules
 from modules.utilities import is_image, is_video, resolve_relative_path
 
 ROOT = None
-ROOT_HEIGHT = 700
+ROOT_HEIGHT = 800
 ROOT_WIDTH = 600
 
 PREVIEW = None
@@ -102,65 +105,69 @@ def create_root(start: Callable[[], None], destroy: Callable[[], None]) -> ctk.C
     root.protocol('WM_DELETE_WINDOW', lambda: destroy())
 
     source_label = ctk.CTkLabel(root, text=None)
-    source_label.place(relx=0.1, rely=0.1, relwidth=0.3, relheight=0.25)
+    source_label.place(relx=0.1, rely=0.0875, relwidth=0.3, relheight=0.25)
 
     target_label = ctk.CTkLabel(root, text=None)
-    target_label.place(relx=0.6, rely=0.1, relwidth=0.3, relheight=0.25)
+    target_label.place(relx=0.6, rely=0.0875, relwidth=0.3, relheight=0.25)
 
     source_button = ctk.CTkButton(root, text='Select a face', cursor='hand2', command=select_source_path)
-    source_button.place(relx=0.1, rely=0.4, relwidth=0.3, relheight=0.1)
+    source_button.place(relx=0.1, rely=0.35, relwidth=0.3, relheight=0.1)
 
     target_button = ctk.CTkButton(root, text='Select a target', cursor='hand2', command=select_target_path)
-    target_button.place(relx=0.6, rely=0.4, relwidth=0.3, relheight=0.1)
+    target_button.place(relx=0.6, rely=0.35, relwidth=0.3, relheight=0.1)
 
     keep_fps_value = ctk.BooleanVar(value=modules.globals.keep_fps)
     keep_fps_checkbox = ctk.CTkSwitch(root, text='Keep fps', variable=keep_fps_value, cursor='hand2', command=lambda: setattr(modules.globals, 'keep_fps', not modules.globals.keep_fps))
-    keep_fps_checkbox.place(relx=0.1, rely=0.6)
+    keep_fps_checkbox.place(relx=0.1, rely=0.525)
 
     keep_frames_value = ctk.BooleanVar(value=modules.globals.keep_frames)
     keep_frames_switch = ctk.CTkSwitch(root, text='Keep frames', variable=keep_frames_value, cursor='hand2', command=lambda: setattr(modules.globals, 'keep_frames', keep_frames_value.get()))
-    keep_frames_switch.place(relx=0.1, rely=0.65)
+    keep_frames_switch.place(relx=0.1, rely=0.56875)
 
     enhancer_value = ctk.BooleanVar(value=modules.globals.fp_ui['face_enhancer'])
     enhancer_switch = ctk.CTkSwitch(root, text='Face Enhancer', variable=enhancer_value, cursor='hand2', command=lambda: update_tumbler('face_enhancer', enhancer_value.get()))
-    enhancer_switch.place(relx=0.1, rely=0.7)
+    enhancer_switch.place(relx=0.1, rely=0.6125)
 
     keep_audio_value = ctk.BooleanVar(value=modules.globals.keep_audio)
     keep_audio_switch = ctk.CTkSwitch(root, text='Keep audio', variable=keep_audio_value, cursor='hand2', command=lambda: setattr(modules.globals, 'keep_audio', keep_audio_value.get()))
-    keep_audio_switch.place(relx=0.6, rely=0.6)
+    keep_audio_switch.place(relx=0.6, rely=0.525)
 
     many_faces_value = ctk.BooleanVar(value=modules.globals.many_faces)
     many_faces_switch = ctk.CTkSwitch(root, text='Many faces', variable=many_faces_value, cursor='hand2', command=lambda: setattr(modules.globals, 'many_faces', many_faces_value.get()))
-    many_faces_switch.place(relx=0.6, rely=0.65)
+    many_faces_switch.place(relx=0.6, rely=0.56875)
 
     nsfw_value = ctk.BooleanVar(value=modules.globals.nsfw)
     nsfw_switch = ctk.CTkSwitch(root, text='NSFW', variable=nsfw_value, cursor='hand2', command=lambda: setattr(modules.globals, 'nsfw', nsfw_value.get()))
-    nsfw_switch.place(relx=0.6, rely=0.7)
+    nsfw_switch.place(relx=0.6, rely=0.6125)
 
     start_button = ctk.CTkButton(root, text='Start', cursor='hand2', command=lambda: select_output_path(start))
-    start_button.place(relx=0.15, rely=0.8, relwidth=0.2, relheight=0.05)
+    start_button.place(relx=0.15, rely=0.7, relwidth=0.2, relheight=0.05)
 
     stop_button = ctk.CTkButton(root, text='Destroy', cursor='hand2', command=destroy)
-    stop_button.place(relx=0.4, rely=0.8, relwidth=0.2, relheight=0.05)
+    stop_button.place(relx=0.4, rely=0.7, relwidth=0.2, relheight=0.05)
 
     preview_button = ctk.CTkButton(root, text='Preview', cursor='hand2', command=toggle_preview)
-    preview_button.place(relx=0.65, rely=0.8, relwidth=0.2, relheight=0.05)
+    preview_button.place(relx=0.65, rely=0.7, relwidth=0.2, relheight=0.05)
 
     camera_label = ctk.CTkLabel(root, text="Select Camera:")
-    camera_label.place(relx=0.4, rely=0.86, relwidth=0.2, relheight=0.05)
+    camera_label.place(relx=0.4, rely=0.7525, relwidth=0.2, relheight=0.05)
 
     available_cameras = get_available_cameras()
     available_camera_strings = [str(cam) for cam in available_cameras]
 
     camera_variable = ctk.StringVar(value=available_camera_strings[0] if available_camera_strings else "No cameras found")
     camera_optionmenu = ctk.CTkOptionMenu(root, variable=camera_variable, values=available_camera_strings)
-    camera_optionmenu.place(relx=0.65, rely=0.86, relwidth=0.2, relheight=0.05)
+    camera_optionmenu.place(relx=0.65, rely=0.7525, relwidth=0.2, relheight=0.05)
 
-    live_button = ctk.CTkButton(root, text='Live', cursor='hand2', command=lambda: webcam_preview(camera_variable.get()))
-    live_button.place(relx=0.15, rely=0.86, relwidth=0.2, relheight=0.05)
+    virtual_cam_out_value = ctk.BooleanVar(value=False)
+    virtual_cam_out_switch = ctk.CTkSwitch(root, text='Virtual Cam Output (OBS)', variable=virtual_cam_out_value, cursor='hand2')
+    virtual_cam_out_switch.place(relx=0.4, rely=0.805)
+
+    live_button = ctk.CTkButton(root, text='Live', cursor='hand2', command=lambda: webcam_preview(camera_variable.get(), virtual_cam_out_value.get()))
+    live_button.place(relx=0.15, rely=0.7525, relwidth=0.2, relheight=0.05)
 
     status_label = ctk.CTkLabel(root, text=None, justify='center')
-    status_label.place(relx=0.1, relwidth=0.8, rely=0.9)
+    status_label.place(relx=0.1, relwidth=0.8, rely=0.875)
 
     donate_label = ctk.CTkLabel(root, text='Deep Live Cam', justify='center', cursor='hand2')
     donate_label.place(relx=0.1, rely=0.95, relwidth=0.8)
@@ -303,12 +310,42 @@ def update_preview(frame_number: int = 0) -> None:
         image = ctk.CTkImage(image, size=image.size)
         preview_label.configure(image=image)
 
+def webcam_preview_loop(cap: cv2.VideoCapture, source_image: Any, frame_processors: List[ModuleType], virtual_cam: pyvirtualcam.Camera = None) -> bool:
+    global preview_label, PREVIEW
 
-def webcam_preview(camera_name: str):
+    ret, frame = cap.read()
+    if not ret:
+        update_status(f"Error: Frame not received from camera.")
+        return False
+
+    temp_frame = frame.copy()
+
+    for frame_processor in frame_processors:
+        temp_frame = frame_processor.process_frame(source_image, temp_frame)
+
+    image = Image.fromarray(cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB))
+    image = ImageOps.contain(image, (PREVIEW_MAX_WIDTH, PREVIEW_MAX_HEIGHT), Image.LANCZOS)
+    image = ctk.CTkImage(image, size=image.size)
+    preview_label.configure(image=image)
+    if virtual_cam:
+        virtual_cam.send(temp_frame)
+        virtual_cam.sleep_until_next_frame()
+    ROOT.update()
+
+    if PREVIEW.state() == 'withdrawn':
+        return False
+    
+    return True
+
+def webcam_preview(camera_name: str, virtual_cam_output: bool):
     if modules.globals.source_path is None:
         return
 
     global preview_label, PREVIEW
+
+    WIDTH = 960
+    HEIGHT = 540
+    FPS = 60
 
     # Select the camera by its name
     selected_camera = select_camera(camera_name)
@@ -325,12 +362,12 @@ def webcam_preview(camera_name: str):
         update_status(f"Error: Could not open camera {camera_name}")
         return
 
-    cap.set(cv2.CAP_PROP_FRAME_WIDTH, 960)
-    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 540)
-    cap.set(cv2.CAP_PROP_FPS, 60)
+    cap.set(cv2.CAP_PROP_FRAME_WIDTH, WIDTH)
+    cap.set(cv2.CAP_PROP_FRAME_HEIGHT, HEIGHT)
+    cap.set(cv2.CAP_PROP_FPS, FPS)
 
-    PREVIEW_MAX_WIDTH = 960
-    PREVIEW_MAX_HEIGHT = 540
+    PREVIEW_MAX_WIDTH = WIDTH
+    PREVIEW_MAX_HEIGHT = HEIGHT
 
     preview_label.configure(image=None)
     PREVIEW.deiconify()
@@ -338,22 +375,17 @@ def webcam_preview(camera_name: str):
     frame_processors = get_frame_processors_modules(modules.globals.frame_processors)
     source_image = get_one_face(cv2.imread(modules.globals.source_path))
 
-    while True:
-        ret, frame = cap.read()
-        if not ret:
-            update_status(f"Error: Frame not received from camera.")
-            break
+    preview_running = True
 
-        temp_frame = frame.copy()
+    if virtual_cam_output:
+        with pyvirtualcam.Camera(width=WIDTH, height=HEIGHT, fps=FPS, fmt=pyvirtualcam.PixelFormat.BGR) as virtual_cam:
+            while preview_running:
+                preview_running = webcam_preview_loop(cap, source_image, frame_processors, virtual_cam)
 
-        for frame_processor in frame_processors:
-            temp_frame = frame_processor.process_frame(source_image, temp_frame)
+    while preview_running:
+        preview_running = webcam_preview_loop(cap, source_image, frame_processors)
 
-        image = Image.fromarray(cv2.cvtColor(temp_frame, cv2.COLOR_BGR2RGB))
-        image = ImageOps.contain(image, (PREVIEW_MAX_WIDTH, PREVIEW_MAX_HEIGHT), Image.LANCZOS)
-        image = ctk.CTkImage(image, size=image.size)
-        preview_label.configure(image=image)
-        ROOT.update()
+        
 
     cap.release()
     PREVIEW.withdraw()
@@ -389,12 +421,7 @@ def get_available_cameras():
                 print(f"Skipping Continuity Camera: {device.localizedName()}")
     elif platform.system() == 'Windows' or platform.system() == 'Linux':
         # Use OpenCV to detect camera indexes
-        index = 0
-        while True:
-            cap = cv2.VideoCapture(index)
-            if not cap.isOpened():
-                break
-            available_cameras.append(f"Camera {index}")
-            cap.release()
-            index += 1
+        devices = FilterGraph().get_input_devices()
+
+        available_cameras = devices
     return available_cameras
